@@ -275,8 +275,21 @@ class PatchcoreModel(DynamicBufferMixin, nn.Module):
             raise ValueError(msg)
 
         # Coreset Subsampling
-        self.memory_bank = torch.vstack(self.embedding_store)
+        original_device = self.embedding_store[0].device
+        cpu_store = []
+        for emb in self.embedding_store:
+            cpu_store.append(emb.detach().cpu())
         self.embedding_store.clear()
+        
+        # free VRAM used by the store
+        if original_device.type == "cuda":
+            torch.cuda.empty_cache()
+        
+        memory_bank_cpu = torch.vstack(cpu_store)
+        self.memory_bank = memory_bank_cpu.to(original_device, non_blocking=True)
+        
+        #self.memory_bank = torch.vstack(self.embedding_store)
+        #self.embedding_store.clear()
 
         sampler = KCenterGreedy(embedding=self.memory_bank, sampling_ratio=sampling_ratio)
         self.memory_bank = sampler.sample_coreset()
